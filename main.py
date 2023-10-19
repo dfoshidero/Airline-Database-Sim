@@ -3,7 +3,7 @@ import os
 import tkinter as tk
 from tkinter import ttk
 import tkinter.messagebox as tkMessageBox
-import connection
+import datetime
 
 from tkintertable import TableCanvas
 
@@ -101,8 +101,7 @@ def fetchFlightsDashboard():
       AC.PASSENGER_CAPACITY AS Flight_Capacity,
       strftime('%Y-%m-%d %H:%M', D.SCH_DEPR_DATETIME) AS Departure_DateTime,
       strftime('%Y-%m-%d %H:%M', A.SCH_ARR_DATETIME) AS Arrival_DateTime,
-      (strftime('%s', A.SCH_ARR_DATETIME) - strftime('%s', D.SCH_DEPR_DATETIME)) / 60 AS Scheduled_Flt_Duration,
-      (strftime('%s', A.ACT_ARR_DATETIME) - strftime('%s', D.ACT_DEPR_DATETIME)) / 60 AS Actual_Flt_Duration,
+      (strftime('%s', A.SCH_ARR_DATETIME) - strftime('%s', D.SCH_DEPR_DATETIME)) / 60 AS Sched_Flight_Minutes,
       DD.AIRPORT_NAME AS Departure_Airport,
       DD.AIRPORT_COUNTRY || ', ' || DD.AIRPORT_CITY AS Departure_Location,
       D.DEP_TERMINAL AS Departure_Terminal,
@@ -175,12 +174,13 @@ def fetchAircrafts():
 def fetchCrew():
   connectDatabase()
 
-  cursor.execute(f"""SELECT C.CREW_ID, C.CREW_NAME, E.SIZE, C.CREW_DETAILS
-  FROM DB_CABINCREWS C
-  LEFT JOIN (
-	SELECT EMP_CREW_ID, COUNT(EMP_ID) AS SIZE
-	FROM DB_EMPLOYEE
-	GROUP BY EMP_CREW_ID) E ON C.CREW_ID = E.EMP_CREW_ID""")
+  cursor.execute(f"""SELECT
+    C.CREW_ID,
+    C.CREW_NAME,
+    (SELECT COUNT(*) FROM DB_EMPLOYEE E WHERE E.EMP_CREW_ID = C.CREW_ID) AS SIZE,
+    C.CREW_DETAILS
+FROM
+    DB_CABINCREWS C;""")
 
   data = cursor.fetchall()
   column_names = [description[0] for description in cursor.description]
@@ -250,10 +250,38 @@ def returnTable(tablename):
   for widget in window.winfo_children():
     widget.destroy()
 
+  dpar_button_frame = tk.Frame(window)
+
+  departure_button = tk.Button(dpar_button_frame,
+                               text="Departures",
+                               command=lambda: returnTable("Departures"))
+  arrival_button = tk.Button(dpar_button_frame,
+                             text="Arrivals",
+                             command=lambda: returnTable("Arrivals"))
+
+  view_all_button = tk.Button(dpar_button_frame,
+                              bg="grey64",
+                              fg="white",
+                              text="RETURN TO GENERAL OVERVIEW",
+                              command=lambda: returnTable("General Overview"))
+
   title_label = tk.Label(window,
                          text=(str(tablename) + " Dashboard"),
                          font=("Arial", 12))
-  title_label.pack(fill="x", pady=10)
+  title_label.pack(fill="x", pady=(10, 0))
+  dpar_button_frame.pack(fill="x", pady=(0, 10))
+
+  if tablename == "Departures":
+    arrival_button.pack(side=tk.LEFT, padx=(10, 20), pady=5)
+    view_all_button.pack(side=tk.LEFT, padx=(10, 20), pady=5)
+
+  elif tablename == "Arrivals":
+    departure_button.pack(side=tk.LEFT, padx=(20, 10), pady=5)
+    view_all_button.pack(side=tk.LEFT, padx=(10, 20), pady=5)
+
+  elif tablename == "General Overview":
+    departure_button.pack(side=tk.LEFT, padx=(20, 10), pady=5)
+    arrival_button.pack(side=tk.LEFT, padx=(10, 20), pady=5)
 
   table_frame = tk.Frame(window)
   table_frame.pack(fill="both", expand=True)
@@ -278,26 +306,273 @@ def returnTable(tablename):
   horizontal_scrollbar.pack(side="bottom", fill="x")
   table_tree.pack(fill="both", expand=True)
 
-  def select_record():
+  def updateRecord():
     pass
 
-  select_button = tk.Button(window,
-                            text="Select Record",
-                            command=select_record)
-
-  def update_record():
+  def selectRecord():
     pass
 
-  update_button = tk.Button(window, text="Save Record", command=update_record)
+  def getCrewChoices():
 
-  select_button.pack(side=tk.RIGHT, padx=10)
-  update_button.pack(side=tk.RIGHT, padx=10)
+    connectDatabase()
+
+    cursor.execute("SELECT CREW_ID FROM DB_CABINCREWS")
+    choices = [row[0] for row in cursor.fetchall()]
+
+    closeDatabase()
+    return choices
+
+  def getAircraftChoices():
+
+    connectDatabase()
+
+    cursor.execute("SELECT AIRCRAFT_ID FROM DB_AIRCRAFT")
+    choices = [row[0] for row in cursor.fetchall()]
+
+    closeDatabase()
+    return choices
+
+  def getAirportChoices():
+
+    connectDatabase()
+
+    cursor.execute("SELECT AIRPORT_ID FROM DB_AIRPORTS")
+    choices = [row[0] for row in cursor.fetchall()]
+
+    closeDatabase()
+    return choices
+
+  def getEmployeeChoices():
+
+    connectDatabase()
+
+    cursor.execute("SELECT EMP_ID FROM DB_EMPLOYEE")
+    choices = [row[0] for row in cursor.fetchall()]
+
+    closeDatabase()
+    return choices
+
+  def addRecord():
+    for widget in window.winfo_children():
+      widget.destroy()
+
+    def insertRecord(data):
+      connectDatabase()
+
+      if tablename == "General Overview" or tablename == "Departures" or tablename == "Arrivals":
+        departure_datetime = datetime.datetime.strptime(
+          data["Departure DateTime"], '%Y-%m-%d %H:%M')
+        arrival_datetime = datetime.datetime.strptime(data["Arrival DateTime"],
+                                                      '%Y-%m-%d %H:%M')
+
+        flight_duration = arrival_datetime - departure_datetime
+        flight_duration_minutes = flight_duration.total_seconds() / 60
+
+        cursor.execute(
+          f"""INSERT INTO DB_DEPARTURES (DEP_AIRPORT_ID, DEP_TERMINAL, SCH_DEPR_DATETIME) 
+                           VALUES (?, ?, ?)""",
+          (data["Departure Airport"], data["Departure Terminal"],
+           data["Departure DateTime"]))
+
+        departure_id = cursor.lastrowid
+
+        cursor.execute(
+          f"""INSERT INTO DB_ARRIVALS (ARR_AIRPORT_ID, ARR_TERMINAL, SCH_ARR_DATETIME) 
+         VALUES (?, ?, ?)""",
+          (data["Arrival Airport"], data["Arrival Terminal"],
+           data["Arrival DateTime"]))
+
+        arrival_id = cursor.lastrowid
+
+        cursor.execute(
+          f"""INSERT INTO DB_FLIGHTS (DEPARTURE_ID, ARRIVAL_ID, AIRCRAFT_ID, CREW_ID, FLIGHT_DURATION) 
+         VALUES (?, ?, ?, ?, ?)""",
+          (departure_id, arrival_id, data["Aircraft"], data["Crew"],
+           flight_duration_minutes))
+
+      conn.commit()
+      closeDatabase()
+
+      for entry in entry_boxes.values():
+        entry.delete(0, 'end')
+
+      tkMessageBox.showinfo("Success", "Record added successfully!")
+
+    #ADD FRAME
+    add_label = tk.Label(window, text=("Add Flights"), font=("Arial", 12))
+    add_label.pack(fill="x", pady=(30, 0))
+
+    add_frame = tk.Frame(window)
+    add_frame.pack(pady=(10), anchor=tk.CENTER)
+
+    #ENTRY BOXES
+    if tablename == "General Overview" or tablename == "Departures" or tablename == "Arrivals":
+
+      fields = [
+        "Aircraft", "Departure Airport", "Departure Terminal",
+        "Departure DateTime", "Arrival Airport", "Arrival Terminal",
+        "Arrival DateTime", "Crew"
+      ]
+      entry_boxes = {}
+
+      for i, field in enumerate(fields):
+        label = tk.Label(add_frame, text=field)
+        label.grid(row=i, column=0)
+
+        if field == "Departure DateTime" or field == "Arrival DateTime":
+          entry = ttk.Combobox(add_frame)
+          entry.insert(0, "YYYY-MM-DD HH:MM")
+
+        elif field == "Crew":
+          choices = getCrewChoices()
+          entry = ttk.Combobox(add_frame, values=choices)
+
+        elif field == "Aircraft":
+          choices = getAircraftChoices()
+          entry = ttk.Combobox(add_frame, values=choices)
+
+        elif field == "Departure Airport" or field == "Arrival Airport":
+          choices = getAirportChoices()
+          entry = ttk.Combobox(add_frame, values=choices)
+
+        else:
+          entry = tk.Entry(add_frame)
+
+        entry.grid(row=i, column=1, pady=5)
+        entry_boxes[field] = entry
+
+    elif tablename == "Employee":
+      fields = [
+        "Last Name", "First Name", "Role", "Crew", "Gender", "Annual Salary",
+        "Contact Details"
+      ]
+      entry_boxes = {}
+
+      for i, field in enumerate(fields):
+        label = tk.Label(add_frame, text=field)
+        label.grid(row=i, column=0)
+
+        if field == "Crew ID":
+          choices = getCrewChoices()
+          entry = ttk.Combobox(add_frame, values=choices)
+
+        elif field == "Gender":
+          choices = ["Male", "Female", "Other"]
+          entry = ttk.Combobox(add_frame, values=choices)
+
+        else:
+          entry = tk.Entry(add_frame)
+
+        entry.grid(row=i, column=1, pady=5)
+        entry_boxes[field] = entry
+
+    elif tablename == "Crew":
+      fields = ["Crew Name", "Crew Details"]
+      entry_boxes = {}
+
+      for i, field in enumerate(fields):
+        label = tk.Label(add_frame, text=field)
+        label.grid(row=i, column=0)
+
+        entry = tk.Entry(add_frame)
+
+        entry.grid(row=i, column=1, pady=5)
+        entry_boxes[field] = entry
+
+    elif tablename == "Airport":
+      fields = ["Airport Name", "Airport Country", "Airport City"]
+      entry_boxes = {}
+
+      for i, field in enumerate(fields):
+        label = tk.Label(add_frame, text=field)
+        label.grid(row=i, column=0)
+
+        entry = tk.Entry(add_frame)
+
+        entry.grid(row=i, column=1, pady=5)
+        entry_boxes[field] = entry
+
+    elif tablename == "Aircraft":
+      fields = ["Aircraft Name", "Aircraft Type", "Passenger Capacity"]
+      entry_boxes = {}
+
+      for i, field in enumerate(fields):
+        label = tk.Label(add_frame, text=field)
+        label.grid(row=i, column=0)
+
+        if field == "Aircraft Type":
+          choices = ["Commercial", "Private"]
+          entry = ttk.Combobox(add_frame, values=choices)
+
+        else:
+          entry = tk.Entry(add_frame)
+
+        entry.grid(row=i, column=1, pady=5)
+        entry_boxes[field] = entry
+
+    elif tablename == "Pilot":
+      fields = [
+        "Employee ID", "License Type", "Passport Number", "Country of Origin"
+      ]
+      entry_boxes = {}
+
+      for i, field in enumerate(fields):
+        label = tk.Label(add_frame, text=field)
+        label.grid(row=i, column=0)
+
+        if field == "Employee ID":
+          choices = getEmployeeChoices()
+          entry = ttk.Combobox(add_frame, values=choices)
+
+        elif field == "License Type":
+          choices = ["Commercial", "Private"]
+          entry = ttk.Combobox(add_frame, values=choices)
+
+        else:
+          entry = tk.Entry(add_frame)
+
+        entry.grid(row=i, column=1, pady=5)
+        entry_boxes[field] = entry
+
+      #ADD DATA BUTTON
+    def get_entry_data():
+      data = {}
+      for col, entry in entry_boxes.items():
+        data[col] = entry.get()
+      insertRecord(data)
+
+    retrieve_button = tk.Button(add_frame,
+                                text="Confirm Data",
+                                command=get_entry_data)
+    retrieve_button.grid(row=len(columns), columnspan=2, pady=10)
+
+    view_all_button = tk.Button(window,
+                                bg="grey32",
+                                fg="white",
+                                text="RETURN TO PAGE",
+                                command=lambda: returnTable(tablename))
+
+    view_all_button.pack(padx=10, pady=(0, 5))
+
+  select_button = tk.Button(window, text="Select Record", command=selectRecord)
+
+  update_button = tk.Button(window, text="Save Record", command=updateRecord)
+
+  add_button = tk.Button(window, text="Add Record", command=addRecord)
+  assign_pilots_button = tk.Button(window,
+                                   text="Assign Pilots",
+                                   command=addRecord)
 
   back_button = tk.Button(window,
                           text="Open Dataset Manager",
                           fg="black",
                           command=masterPage)
+
   back_button.pack(side=tk.LEFT, padx=10)
+  add_button.pack(side=tk.LEFT, padx=10)
+  select_button.pack(side=tk.RIGHT, padx=10)
+  update_button.pack(side=tk.RIGHT, padx=10)
+
   closeDatabase()
 
 
@@ -305,16 +580,15 @@ def masterPage():
   for widget in window.winfo_children():
     widget.destroy()
 
-  # Create a frame to hold the buttons
   button_frame = tk.Frame(window, bg="grey32")
-  button_frame.pack(pady=20, expand="yes")  # Add padding at the top
+  button_frame.pack(pady=20, expand="yes")
 
-  # Create the "VIEW ALL" button
   view_all_button = tk.Button(button_frame,
                               bg="grey64",
                               fg="white",
                               text="RETURN TO GENERAL OVERVIEW",
                               command=lambda: returnTable("General Overview"))
+
   view_all_button.pack(padx=10, pady=15)
 
   airport_button = tk.Button(button_frame,
@@ -333,18 +607,9 @@ def masterPage():
     button_frame,
     text="Pilot Flight Rota",
     command=lambda: returnTable("Pilot Schedule"))
-  departure_button = tk.Button(button_frame,
-                               text="Departures",
-                               command=lambda: returnTable("Departures"))
-  arrival_button = tk.Button(button_frame,
-                             text="Arrivals",
-                             command=lambda: returnTable("Arrivals"))
   crew_button = tk.Button(button_frame,
                           text="Crew Data",
                           command=lambda: returnTable("Crew"))
-
-  departure_button.pack(pady=5)
-  arrival_button.pack(pady=5)
 
   employee_button.pack(pady=5)
   crew_button.pack(pady=5)

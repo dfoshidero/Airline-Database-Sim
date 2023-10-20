@@ -46,6 +46,7 @@ def resetData():
     cursor.executescript(sql_script)
 
   closeDatabase()
+  tkMessageBox.showinfo("System", "Data has been reset.")
 
 
 def fetchDepartures():
@@ -193,17 +194,17 @@ def fetchSchedule():
   connectDatabase()
 
   cursor.execute(f"""SELECT 
-    F.FLIGHT_ID AS Flight_No, 
-    P.PILOT_ID AS Pilot_No, 
+    AP.FLIGHT_ID AS Flight_No, 
+    AP.PILOT_ID AS Pilot_No, 
     P.PASSPORT_NO AS Pilot_Passport_No, 
     DA.AIRPORT_CITY || '  -  ' || AA.AIRPORT_CITY AS Flight_Description, 
     P.LICENSE_TYPE AS Flight_Type, 
     A.AIRCRAFT_NAME AS Aircraft, 
     strftime('%Y-%m-%d %H:%M:%S', SD.SCH_DEPR_DATETIME) AS Departure_DateTime
 FROM 
-    DB_PILOTS P
-    LEFT JOIN BRIDGE_ASSIGNEDPILOTS AP ON P.PILOT_ID = AP.PILOT_ID
+    BRIDGE_ASSIGNEDPILOTS AP
     LEFT JOIN DB_FLIGHTS F ON AP.FLIGHT_ID = F.FLIGHT_ID
+    LEFT JOIN DB_PILOTS P ON AP.PILOT_ID = P.PILOT_ID
     LEFT JOIN DB_AIRCRAFT A ON F.AIRCRAFT_ID = A.AIRCRAFT_ID
     LEFT JOIN DB_DEPARTURES SD ON F.DEPARTURE_ID = SD.DEPARTURE_ID
     LEFT JOIN DB_ARRIVALS SA ON F.ARRIVAL_ID = SA.ARRIVAL_ID
@@ -301,9 +302,15 @@ def returnTable(tablename):
   horizontal_scrollbar = ttk.Scrollbar(container,
                                        orient="horizontal",
                                        command=table_tree.xview)
+  vertical_scrollbar = ttk.Scrollbar(container,
+                                     orient="vertical",
+                                     command=table_tree.yview)
+
   table_tree.configure(xscrollcommand=horizontal_scrollbar.set)
+  table_tree.configure(yscrollcommand=vertical_scrollbar.set)
 
   horizontal_scrollbar.pack(side="bottom", fill="x")
+  vertical_scrollbar.pack(side="right", fill="y")
   table_tree.pack(fill="both", expand=True)
 
   def updateRecord():
@@ -332,6 +339,26 @@ def returnTable(tablename):
     closeDatabase()
     return choices
 
+  def getPilotChoices():
+
+    connectDatabase()
+
+    cursor.execute("SELECT PILOT_ID FROM DB_PILOTS")
+    choices = [row[0] for row in cursor.fetchall()]
+
+    closeDatabase()
+    return choices
+
+  def getFlightChoices():
+
+    connectDatabase()
+
+    cursor.execute("SELECT FLIGHT_ID FROM DB_FLIGHTS")
+    choices = [row[0] for row in cursor.fetchall()]
+
+    closeDatabase()
+    return choices
+
   def getAirportChoices():
 
     connectDatabase()
@@ -351,6 +378,75 @@ def returnTable(tablename):
 
     closeDatabase()
     return choices
+
+  def assignPilots():
+
+    for widget in window.winfo_children():
+      widget.destroy()
+
+    def insertRecord(data):
+      connectDatabase()
+
+      cursor.execute(
+        f"""INSERT INTO BRIDGE_ASSIGNEDPILOTS (PILOT_ID, FLIGHT_ID) 
+                         VALUES (?, ?)""",
+        (data["Select Pilot"], data["Select Flight"]))
+
+      conn.commit()
+      closeDatabase()
+
+      for entry in entry_boxes.values():
+        entry.delete(0, 'end')
+
+      tkMessageBox.showinfo(
+        "Success", "Pilot " + data["Select Pilot"] +
+        " has been assigned to Flight " + data["Select Flight"] + ".")
+
+    add_label = tk.Label(window, text=("ADD NEW ROW"), font=("Arial", 12))
+    add_label.pack(fill="x", pady=(30, 0))
+
+    add_frame = tk.Frame(window)
+    add_frame.pack(pady=(10), anchor=tk.CENTER)
+
+    fields = ["Select Flight", "Select Pilot"]
+    entry_boxes = {}
+
+    for i, field in enumerate(fields):
+      label = tk.Label(add_frame, text=field)
+      label.grid(row=i, column=0)
+
+      if field == "Select Pilot":
+        choices = getPilotChoices()
+        entry = ttk.Combobox(add_frame, values=choices)
+
+      elif field == "Select Flight":
+        choices = getFlightChoices()
+        entry = ttk.Combobox(add_frame, values=choices)
+
+      else:
+        entry = tk.Entry(add_frame)
+
+      entry.grid(row=i, column=1, pady=5)
+      entry_boxes[field] = entry
+
+    def get_entry_data():
+      data = {}
+      for col, entry in entry_boxes.items():
+        data[col] = entry.get()
+      insertRecord(data)
+
+    retrieve_button = tk.Button(add_frame,
+                                text="Confirm Data",
+                                command=get_entry_data)
+    retrieve_button.grid(row=len(columns), columnspan=2, pady=10)
+
+    view_all_button = tk.Button(window,
+                                bg="grey32",
+                                fg="white",
+                                text="RETURN TO PAGE",
+                                command=lambda: returnTable(tablename))
+
+    view_all_button.pack(padx=10, pady=(0, 5))
 
   def addRecord():
     for widget in window.winfo_children():
@@ -390,6 +486,41 @@ def returnTable(tablename):
           (departure_id, arrival_id, data["Aircraft"], data["Crew"],
            flight_duration_minutes))
 
+      elif tablename == "Employee":
+        cursor.execute(
+          f"""INSERT INTO DB_EMPLOYEE (EMP_LAST_NAME, EMP_FIRST_NAME, EMP_ROLE, EMP_CREW_ID, EMP_GENDER, EMP_ANNUAL, CONTACT_DETAILS) 
+                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+          (data["Last Name"], data["First Name"], data["Role"], data["Crew"],
+           data["Gender"], data["Annual Salary"], data["Contact Details"]))
+
+      elif tablename == "Crew":
+        cursor.execute(
+          f"""INSERT INTO DB_EMPLOYEE (EMP_LAST_NAME, EMP_FIRST_NAME, EMP_ROLE, EMP_CREW_ID, EMP_GENDER, EMP_ANNUAL, CONTACT_DETAILS) 
+                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+          (data["Last Name"], data["First Name"], data["Role"], data["Crew"],
+           data["Gender"], data["Annual Salary"], data["Contact Details"]))
+
+      elif tablename == "Pilot":
+        cursor.execute(
+          f"""INSERT INTO DB_PILOTS (EMP_ID, LICENSE_TYPE, PASSPORT_NO, ORIGIN_COUNTRY) 
+                           VALUES (?, ?, ?, ?)""",
+          (data["Employee ID"], data["License Type"], data["Passport Number"],
+           data["Country of Origin"]))
+
+      elif tablename == "Aircraft":
+        cursor.execute(
+          f"""INSERT INTO DB_AIRCRAFT (AIRCRAFT_NAME, AIRCRAFT_TYPE, PASSENGER_CAPACITY) 
+                           VALUES (?, ?, ?)""",
+          (data["Aircraft Name"], data["Aircraft Type"],
+           data["Passenger Capacity"]))
+
+      elif tablename == "Airport":
+        cursor.execute(
+          f"""INSERT INTO DB_AIRPORTS (AIRPORT_NAME, AIRPORT_COUNTRY, AIRPORT_CITY) 
+                           VALUES (?, ?, ?)""",
+          (data["Airport Name"], data["Airport Country"],
+           data["Airport City"]))
+
       conn.commit()
       closeDatabase()
 
@@ -399,7 +530,7 @@ def returnTable(tablename):
       tkMessageBox.showinfo("Success", "Record added successfully!")
 
     #ADD FRAME
-    add_label = tk.Label(window, text=("Add Flights"), font=("Arial", 12))
+    add_label = tk.Label(window, text=("ADD NEW ROW"), font=("Arial", 12))
     add_label.pack(fill="x", pady=(30, 0))
 
     add_frame = tk.Frame(window)
@@ -452,7 +583,7 @@ def returnTable(tablename):
         label = tk.Label(add_frame, text=field)
         label.grid(row=i, column=0)
 
-        if field == "Crew ID":
+        if field == "Crew":
           choices = getCrewChoices()
           entry = ttk.Combobox(add_frame, values=choices)
 
@@ -525,7 +656,7 @@ def returnTable(tablename):
           entry = ttk.Combobox(add_frame, values=choices)
 
         elif field == "License Type":
-          choices = ["Commercial", "Private"]
+          choices = ["Commercial", "Private", "Full"]
           entry = ttk.Combobox(add_frame, values=choices)
 
         else:
@@ -534,7 +665,6 @@ def returnTable(tablename):
         entry.grid(row=i, column=1, pady=5)
         entry_boxes[field] = entry
 
-      #ADD DATA BUTTON
     def get_entry_data():
       data = {}
       for col, entry in entry_boxes.items():
@@ -554,23 +684,164 @@ def returnTable(tablename):
 
     view_all_button.pack(padx=10, pady=(0, 5))
 
-  select_button = tk.Button(window, text="Select Record", command=selectRecord)
+  def deleteRecord():
+    selected_item = table_tree.focus()
+    item_values = table_tree.item(selected_item)
+    if selected_item:
+      item_id = item_values["values"][0]
 
-  update_button = tk.Button(window, text="Save Record", command=updateRecord)
+      if tablename == "General Overview":
+        connectDatabase()
+
+        cursor.execute(
+          f"""SELECT DEPARTURE_ID FROM DB_FLIGHTS WHERE FLIGHT_ID = ?""",
+          (item_id, ))
+        data = cursor.fetchall()
+        dep_id = data[0][0]
+
+        cursor.execute(
+          f"""SELECT ARRIVAL_ID FROM DB_FLIGHTS WHERE FLIGHT_ID = ?""",
+          (item_id, ))
+        data = cursor.fetchall()
+        arr_id = data[0][0]
+
+        cursor.execute("""DELETE FROM DB_DEPARTURES WHERE DEPARTURE_ID = ?""",
+                       (dep_id, ))
+        cursor.execute("""DELETE FROM DB_ARRIVALS WHERE ARRIVAL_ID = ?""",
+                       (arr_id, ))
+        cursor.execute("""DELETE FROM DB_FLIGHTS WHERE FLIGHT_ID = ?""",
+                       (item_id, ))
+
+        table_tree.delete(selected_item)
+        tk.messagebox.showinfo("System", "Successfully Deleted.")
+
+      elif tablename == "Employee":
+        connectDatabase()
+        cursor.execute(f"""SELECT EMP_ID FROM DB_PILOTS WHERE EMP_ID = ?""",
+                       (item_id, ))
+        data = cursor.fetchall()
+
+        if data:
+          tk.messagebox.showerror(
+            "Error",
+            "Employee is a pilot. Please remove from pilot table first.")
+        else:
+          cursor.execute("""DELETE FROM DB_EMPLOYEE WHERE EMP_ID = ?""",
+                         (item_id, ))
+          table_tree.delete(selected_item)
+          tk.messagebox.showinfo("System", "Successfully Deleted.")
+
+      elif tablename == "Crew":
+        connectDatabase()
+        cursor.execute(f"""SELECT CREW_ID FROM DB_FLIGHTS WHERE CREW_ID = ?""",
+                       (item_id, ))
+        data = cursor.fetchall()
+
+        if data:
+          tk.messagebox.showerror(
+            "Error",
+            "Crew is assigned to a flight. Please update the assigned crew before deleting."
+          )
+        else:
+          cursor.execute("""DELETE FROM DB_CABINCREWS WHERE CREW_ID = ?""",
+                         (item_id, ))
+          table_tree.delete(selected_item)
+          tk.messagebox.showinfo("System", "Successfully Deleted.")
+
+      elif tablename == "Pilot":
+        connectDatabase()
+        cursor.execute(f"""SELECT PILOT_ID FROM BRIDGE_ASSIGNEDPILOTS WHERE PILOT_ID = ?""",
+                       (item_id, ))
+        data = cursor.fetchall()
+
+        if data:
+          tk.messagebox.showerror(
+            "Error",
+            "Pilot is assigned to a flight. Please update the assigned pilots before deleting."
+          )
+        else:
+          cursor.execute("""DELETE FROM DB_CABINCREWS WHERE CREW_ID = ?""",
+                         (item_id,))
+          table_tree.delete(selected_item)
+          tk.messagebox.showinfo("System", "Successfully Deleted.")
+
+      elif tablename == "Airport":
+        connectDatabase()
+        cursor.execute(f"""SELECT DEP_AIRPORT_ID FROM DB_DEPARTURES WHERE DEP_AIRPORT_ID = ? 
+                         UNION ALL
+                         SELECT ARR_AIRPORT_ID FROM DB_ARRIVALS WHERE ARR_AIRPORT_ID = ?""",
+                       (item_id, item_id))
+        data = cursor.fetchall()
+
+        if data:
+          tk.messagebox.showerror(
+            "Error",
+            "Flights are still going to this airport."
+          )
+        else:
+          cursor.execute("""DELETE FROM DB_AIRPORTS WHERE AIRPORT_ID = ?""",
+                         (item_id,))
+          table_tree.delete(selected_item)
+          tk.messagebox.showinfo("System", "Successfully Deleted.")
+
+      elif tablename == "Aircraft":
+        connectDatabase()
+        cursor.execute(f"""SELECT AIRCRAFT_ID FROM DB_FLIGHTS WHERE AIRCRAFT_ID = ?""",
+                       (item_id, ))
+        data = cursor.fetchall()
+
+        if data:
+          tk.messagebox.showerror(
+            "Error",
+            "This plane is still assigned to flights. Please check and re-assign accordingly."
+          )
+        else:
+          cursor.execute("""DELETE FROM DB_AIRCRAFT WHERE AIRCRAFT_ID = ?""",
+                         (item_id,))
+          table_tree.delete(selected_item)
+          tk.messagebox.showinfo("System", "Successfully Deleted.")
+          
+      elif tablename == "Pilot Schedule":
+        connectDatabase()
+        
+        cursor.execute("""DELETE FROM BRIDGE_ASSIGNEDPILOTS WHERE FLIGHT_ID = ?""",
+                         (item_id,))
+        table_tree.delete(selected_item)
+        tk.messagebox.showinfo("System", "Pilot has been removed from flight.")
+
+      conn.commit()
+      closeDatabase()
+
+  update_button = tk.Button(window, text="Edit Record", command=updateRecord)
 
   add_button = tk.Button(window, text="Add Record", command=addRecord)
+
   assign_pilots_button = tk.Button(window,
                                    text="Assign Pilots",
-                                   command=addRecord)
+                                   command=assignPilots)
 
   back_button = tk.Button(window,
                           text="Open Dataset Manager",
                           fg="black",
                           command=masterPage)
+  if tablename != "Pilot Schedule":
+    delete_button = tk.Button(window,
+                              text="Delete Record",
+                              command=deleteRecord)
+  else:
+    delete_button = tk.Button(window,
+                              text="Unassign Pilot",
+                              command=deleteRecord)
 
   back_button.pack(side=tk.LEFT, padx=10)
-  add_button.pack(side=tk.LEFT, padx=10)
-  select_button.pack(side=tk.RIGHT, padx=10)
+  if tablename != "Pilot Schedule":
+    add_button.pack(side=tk.LEFT, padx=10)
+
+  if tablename != "Departures" or tablename != "Arrivals":
+    delete_button.pack(side=tk.RIGHT, padx=10)
+
+  if tablename == "General Overview" or tablename == "Departures" or tablename == "Arrivals" or tablename == "Pilot Schedule":
+    assign_pilots_button.pack(side=tk.LEFT, padx=10)
   update_button.pack(side=tk.RIGHT, padx=10)
 
   closeDatabase()
@@ -639,9 +910,15 @@ def startPage():
                      command=lambda: returnTable("General Overview"))
   button.pack()
 
+  reset_button = tk.Button(window,
+                           text="RESET DATA",
+                           bg="grey64",
+                           fg="white",
+                           font=("Arial", 10),
+                           command=resetData)
+  reset_button.pack(pady=20)
+
 
 startPage()
-
-resetData()
 
 tk.mainloop()

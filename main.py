@@ -48,6 +48,12 @@ def resetData():
   closeDatabase()
   tkMessageBox.showinfo("System", "Data has been reset.")
 
+def validate_datetime(datetime_str):
+  try:
+    datetime.datetime.strptime(datetime_str, '%Y-%m-%d %H:%M')
+    return True
+  except ValueError:
+    return False
 
 def fetchDepartures():
   connectDatabase()
@@ -421,6 +427,18 @@ def returnTable(tablename):
       data = {}
       for col, entry in entry_boxes.items():
         data[col] = entry.get()
+        if not data[col]:
+          tkMessageBox.showerror("Error", "Please fill all fields")
+          return
+
+      if tablename in ["General Overview", "Departures", "Arrivals"]:
+        if not validate_datetime(
+            data["Departure DateTime"]) or not validate_datetime(
+              data["Arrival DateTime"]):
+          tkMessageBox.showerror(
+            "Error", "Please enter date time in the format YYYY-MM-DD HH:MM")
+          return
+
       insertRecord(data)
 
     retrieve_button = tk.Button(add_frame,
@@ -560,6 +578,13 @@ def returnTable(tablename):
         entry.grid(row=i, column=1, pady=5)
         entry_boxes[field] = entry
 
+        entry.bind("<FocusIn>",
+                   lambda event, entry=entry: clear_placeholder(event, entry))
+
+      def clear_placeholder(event, entry):
+        if entry.get() == "YYYY-MM-DD HH:MM":
+          entry.delete(0, 'end')
+
     elif tablename == "Employee":
       fields = [
         "Last Name", "First Name", "Role", "Crew", "Gender", "Annual Salary",
@@ -657,6 +682,17 @@ def returnTable(tablename):
       data = {}
       for col, entry in entry_boxes.items():
         data[col] = entry.get()
+        if not data[col]:
+          tkMessageBox.showerror("Error", "Please fill all fields")
+          return
+
+      if tablename in ["General Overview", "Departures", "Arrivals"]:
+        if not validate_datetime(
+            data["Departure DateTime"]) or not validate_datetime(
+              data["Arrival DateTime"]):
+          tkMessageBox.showerror(
+            "Error", "Please enter date time in the format YYYY-MM-DD HH:MM")
+          return
       insertRecord(data)
 
     retrieve_button = tk.Button(add_frame,

@@ -17,7 +17,7 @@ screen_width = window.winfo_screenwidth()
 screen_height = window.winfo_screenheight()
 
 #set window properties.
-window.geometry(f"{screen_width}x{screen_height}")
+window.geometry(f"{screen_width}x{screen_height}+0+0")
 window.configure(bg="grey32")
 
 
@@ -48,12 +48,14 @@ def resetData():
   closeDatabase()
   tkMessageBox.showinfo("System", "Data has been reset.")
 
+
 def validate_datetime(datetime_str):
   try:
     datetime.datetime.strptime(datetime_str, '%Y-%m-%d %H:%M')
     return True
   except ValueError:
     return False
+
 
 def fetchDepartures():
   connectDatabase()

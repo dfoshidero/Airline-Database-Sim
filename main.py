@@ -220,12 +220,6 @@ ORDER BY SD.SCH_DEPR_DATETIME;
   return (data, column_names)
 
 
-# def editData():
-#   def saveChanges():
-
-#   def cancelEdit():
-
-
 def returnTable(tablename):
   connectDatabase()
 
@@ -312,12 +306,6 @@ def returnTable(tablename):
   horizontal_scrollbar.pack(side="bottom", fill="x")
   vertical_scrollbar.pack(side="right", fill="y")
   table_tree.pack(fill="both", expand=True)
-
-  def updateRecord():
-    pass
-
-  def selectRecord():
-    pass
 
   def getCrewChoices():
 
@@ -551,7 +539,7 @@ def returnTable(tablename):
         label.grid(row=i, column=0)
 
         if field == "Departure DateTime" or field == "Arrival DateTime":
-          entry = ttk.Combobox(add_frame)
+          entry = ttk.Entry(add_frame)
           entry.insert(0, "YYYY-MM-DD HH:MM")
 
         elif field == "Crew":
@@ -750,8 +738,9 @@ def returnTable(tablename):
 
       elif tablename == "Pilot":
         connectDatabase()
-        cursor.execute(f"""SELECT PILOT_ID FROM BRIDGE_ASSIGNEDPILOTS WHERE PILOT_ID = ?""",
-                       (item_id, ))
+        cursor.execute(
+          f"""SELECT PILOT_ID FROM BRIDGE_ASSIGNEDPILOTS WHERE PILOT_ID = ?""",
+          (item_id, ))
         data = cursor.fetchall()
 
         if data:
@@ -761,33 +750,33 @@ def returnTable(tablename):
           )
         else:
           cursor.execute("""DELETE FROM DB_CABINCREWS WHERE CREW_ID = ?""",
-                         (item_id,))
+                         (item_id, ))
           table_tree.delete(selected_item)
           tk.messagebox.showinfo("System", "Successfully Deleted.")
 
       elif tablename == "Airport":
         connectDatabase()
-        cursor.execute(f"""SELECT DEP_AIRPORT_ID FROM DB_DEPARTURES WHERE DEP_AIRPORT_ID = ? 
+        cursor.execute(
+          f"""SELECT DEP_AIRPORT_ID FROM DB_DEPARTURES WHERE DEP_AIRPORT_ID = ? 
                          UNION ALL
                          SELECT ARR_AIRPORT_ID FROM DB_ARRIVALS WHERE ARR_AIRPORT_ID = ?""",
-                       (item_id, item_id))
+          (item_id, item_id))
         data = cursor.fetchall()
 
         if data:
-          tk.messagebox.showerror(
-            "Error",
-            "Flights are still going to this airport."
-          )
+          tk.messagebox.showerror("Error",
+                                  "Flights are still going to this airport.")
         else:
           cursor.execute("""DELETE FROM DB_AIRPORTS WHERE AIRPORT_ID = ?""",
-                         (item_id,))
+                         (item_id, ))
           table_tree.delete(selected_item)
           tk.messagebox.showinfo("System", "Successfully Deleted.")
 
       elif tablename == "Aircraft":
         connectDatabase()
-        cursor.execute(f"""SELECT AIRCRAFT_ID FROM DB_FLIGHTS WHERE AIRCRAFT_ID = ?""",
-                       (item_id, ))
+        cursor.execute(
+          f"""SELECT AIRCRAFT_ID FROM DB_FLIGHTS WHERE AIRCRAFT_ID = ?""",
+          (item_id, ))
         data = cursor.fetchall()
 
         if data:
@@ -797,22 +786,347 @@ def returnTable(tablename):
           )
         else:
           cursor.execute("""DELETE FROM DB_AIRCRAFT WHERE AIRCRAFT_ID = ?""",
-                         (item_id,))
+                         (item_id, ))
           table_tree.delete(selected_item)
           tk.messagebox.showinfo("System", "Successfully Deleted.")
-          
+
       elif tablename == "Pilot Schedule":
         connectDatabase()
-        
-        cursor.execute("""DELETE FROM BRIDGE_ASSIGNEDPILOTS WHERE FLIGHT_ID = ?""",
-                         (item_id,))
+
+        cursor.execute(
+          """DELETE FROM BRIDGE_ASSIGNEDPILOTS WHERE FLIGHT_ID = ?""",
+          (item_id, ))
         table_tree.delete(selected_item)
         tk.messagebox.showinfo("System", "Pilot has been removed from flight.")
 
       conn.commit()
       closeDatabase()
 
-  update_button = tk.Button(window, text="Edit Record", command=updateRecord)
+  def editData():
+
+    def updateRecord(data):
+
+      connectDatabase()
+
+      if tablename == "General Overview" or tablename == "Departures" or tablename == "Arrivals":
+        departure_datetime = datetime.datetime.strptime(
+          data["Departure DateTime"], '%Y-%m-%d %H:%M')
+        arrival_datetime = datetime.datetime.strptime(data["Arrival DateTime"],
+                                                      '%Y-%m-%d %H:%M')
+
+        flight_duration = arrival_datetime - departure_datetime
+        flight_duration_minutes = flight_duration.total_seconds() / 60
+
+        existing_data = field_data
+        # Update the departure information
+        cursor.execute(f"""SELECT * FROM DB_FLIGHTS WHERE FLIGHT_ID = ?""",
+                       (existing_data[0][0], ))
+        existing_data = cursor.fetchall()
+
+        cursor.execute(
+          f"""UPDATE DB_DEPARTURES 
+                  SET DEP_AIRPORT_ID = ?, DEP_TERMINAL = ?, SCH_DEPR_DATETIME = ? 
+                  WHERE DEPARTURE_ID = ?""",
+          (data["Departure Airport"], data["Departure Terminal"],
+           data["Departure DateTime"], existing_data[0][1]))
+
+        # Update the arrival information
+        cursor.execute(
+          f"""UPDATE DB_ARRIVALS 
+                  SET ARR_AIRPORT_ID = ?, ARR_TERMINAL = ?, SCH_ARR_DATETIME = ? 
+                  WHERE ARRIVAL_ID = ?""",
+          (data["Arrival Airport"], data["Arrival Terminal"],
+           data["Arrival DateTime"], existing_data[0][2]))
+
+        # Update the flight information
+        cursor.execute(
+          f"""UPDATE DB_FLIGHTS 
+                  SET AIRCRAFT_ID = ?, CREW_ID = ?, FLIGHT_DURATION = ? 
+                  WHERE FLIGHT_ID = ?""",
+          (data["Aircraft"], data["Crew"], flight_duration_minutes,
+           existing_data[0][0]))
+
+      elif tablename == "Employee":
+        selected_item = table_tree.focus()
+        item_values = table_tree.item(selected_item)
+        existing_data = item_values["values"]
+        cursor.execute(
+          f"""UPDATE DB_EMPLOYEE 
+                  SET EMP_LAST_NAME = ?, EMP_FIRST_NAME = ?, EMP_ROLE = ?, 
+                      EMP_CREW_ID = ?, EMP_GENDER = ?, EMP_ANNUAL = ?, CONTACT_DETAILS = ? 
+                  WHERE EMP_ID = ?""",
+          (data["Last Name"], data["First Name"], data["Role"], data["Crew"],
+           data["Gender"], data["Annual Salary"], data["Contact Details"],
+           existing_data[0]))
+
+      elif tablename == "Crew":
+        selected_item = table_tree.focus()
+        item_values = table_tree.item(selected_item)
+        existing_data = item_values["values"]
+        cursor.execute(
+          f"""UPDATE DB_CABINCREWS 
+                  SET CREW_NAME = ?, CREW_DETAILS = ? 
+                  WHERE CREW_ID = ?""",
+          (data["Crew Name"], data["Crew Details"], existing_data[0]))
+
+      elif tablename == "Pilot":
+        selected_item = table_tree.focus()
+        item_values = table_tree.item(selected_item)
+        existing_data = item_values["values"]
+        cursor.execute(
+          f"""UPDATE DB_PILOTS 
+                  SET EMP_ID = ?, LICENSE_TYPE = ?, PASSPORT_NO = ?, ORIGIN_COUNTRY = ? 
+                  WHERE PILOT_ID = ?""",
+          (data["Employee ID"], data["License Type"], data["Passport Number"],
+           data["Country of Origin"], existing_data[0]))
+
+      elif tablename == "Aircraft":
+        selected_item = table_tree.focus()
+        item_values = table_tree.item(selected_item)
+        existing_data = item_values["values"]
+        cursor.execute(
+          f"""UPDATE DB_AIRCRAFT 
+                  SET AIRCRAFT_NAME = ?, AIRCRAFT_TYPE = ?, PASSENGER_CAPACITY = ? 
+                  WHERE AIRCRAFT_ID = ?""",
+          (data["Aircraft Name"], data["Aircraft Type"],
+           data["Passenger Capacity"], existing_data[0]))
+
+      elif tablename == "Airport":
+        selected_item = table_tree.focus()
+        item_values = table_tree.item(selected_item)
+        existing_data = item_values["values"]
+        cursor.execute(
+          f"""UPDATE DB_AIRPORTS 
+          SET AIRPORT_NAME = ?, AIRPORT_COUNTRY = ?, AIRPORT_CITY = ? 
+                  WHERE AIRPORT_ID = ?""",
+          (data["Airport Name"], data["Airport Country"], data["Airport City"],
+           existing_data[0]))
+
+      conn.commit()
+      closeDatabase()
+
+      edit_window.destroy()
+
+      tkMessageBox.showinfo("Success", "Record updated successfully!")
+
+      for widget in window.winfo_children():
+        widget.destroy()
+
+      returnTable(tablename)
+
+    selected_item = table_tree.focus()
+    item_values = table_tree.item(selected_item)
+    existing_data = item_values["values"]
+
+    if not selected_item:
+      tkMessageBox.showerror("Error", "No record selected for editing.")
+      return
+
+    edit_window = tk.Toplevel()
+    edit_window.title("Edit Record")
+    edit_window.configure(bg="lightgray")
+
+    edit_frame = tk.Frame(edit_window)
+    edit_frame.pack(padx=20, pady=10)
+
+    for i, column_name in enumerate(columns):
+
+      if tablename == "General Overview" or tablename == "Departures" or tablename == "Arrivals":
+
+        connectDatabase()
+        cursor.execute(
+          f"""SELECT
+    F.FLIGHT_ID,
+    F.AIRCRAFT_ID,
+    DA.AIRPORT_ID,
+    D.DEP_TERMINAL,
+    strftime('%Y-%m-%d %H:%M', D.SCH_DEPR_DATETIME),
+    AA.AIRPORT_ID,
+    AR.ARR_TERMINAL,
+    strftime('%Y-%m-%d %H:%M', AR.SCH_ARR_DATETIME),
+    C.CREW_ID
+FROM DB_FLIGHTS AS F
+INNER JOIN DB_DEPARTURES AS D ON F.DEPARTURE_ID = D.DEPARTURE_ID
+INNER JOIN DB_AIRPORTS AS DA ON D.DEP_AIRPORT_ID = DA.AIRPORT_ID
+INNER JOIN DB_ARRIVALS AS AR ON F.ARRIVAL_ID = AR.ARRIVAL_ID
+INNER JOIN DB_AIRPORTS AS AA ON AR.ARR_AIRPORT_ID = AA.AIRPORT_ID
+INNER JOIN BRIDGE_ASSIGNEDPILOTS AS AP ON F.FLIGHT_ID = AP.FLIGHT_ID
+INNER JOIN DB_CABINCREWS AS C ON F.CREW_ID = C.CREW_ID
+WHERE F.FLIGHT_ID = ?;""", (existing_data[0], ))
+
+        field_data = cursor.fetchall()
+        closeDatabase()
+
+        fields = [
+          "Aircraft", "Departure Airport", "Departure Terminal",
+          "Departure DateTime", "Arrival Airport", "Arrival Terminal",
+          "Arrival DateTime", "Crew"
+        ]
+        entry_boxes = {}
+
+        for i, field in enumerate(fields):
+          label = tk.Label(edit_frame, text=field)
+          label.grid(row=i, column=0)
+
+          if field == "Aircraft":
+            choices = getAircraftChoices()
+            entry = ttk.Combobox(edit_frame, values=choices)
+            entry.insert(0, field_data[0][1])
+
+          elif field == "Departure Airport":
+            choices = getAirportChoices()
+            entry = ttk.Combobox(edit_frame, values=choices)
+            entry.insert(0, field_data[0][2])
+
+          elif field == "Departure Terminal":
+            entry = tk.Entry(edit_frame)
+            entry.insert(0, field_data[0][3])
+
+          elif field == "Departure DateTime":
+            entry = ttk.Entry(edit_frame)
+            entry.insert(0, field_data[0][4])
+
+          elif field == "Arrival Airport":
+            choices = getAirportChoices()
+            entry = ttk.Combobox(edit_frame, values=choices)
+            entry.insert(0, field_data[0][5])
+
+          elif field == "Arrival Terminal":
+            entry = ttk.Entry(edit_frame)
+            entry.insert(0, field_data[0][6])
+
+          elif field == "Arrival DateTime":
+            entry = tk.Entry(edit_frame)
+            entry.insert(0, field_data[0][7])
+
+          elif field == "Crew":
+            choices = getCrewChoices()
+            entry = ttk.Combobox(edit_frame, values=choices)
+            entry.insert(0, field_data[0][8])
+
+          entry.grid(row=i, column=1, pady=5)
+          entry_boxes[field] = entry
+
+      elif tablename == "Employee":
+        fields = [
+          "Last Name", "First Name", "Role", "Crew", "Gender", "Annual Salary",
+          "Contact Details"
+        ]
+        entry_boxes = {}
+
+        for i, field in enumerate(fields):
+          label = tk.Label(edit_frame, text=field)
+          label.grid(row=i, column=0)
+
+          if field == "Crew":
+            choices = getCrewChoices()
+            entry = ttk.Combobox(edit_frame, values=choices)
+            entry.insert(0, existing_data[i + 1])
+
+          elif field == "Gender":
+            choices = ["Male", "Female", "Other"]
+            entry = ttk.Combobox(edit_frame, values=choices)
+            entry.insert(0, existing_data[i + 1])
+
+          else:
+            entry = tk.Entry(edit_frame)
+            entry.insert(0, existing_data[i + 1])
+
+          entry.grid(row=i, column=1, pady=5)
+          entry_boxes[field] = entry
+
+      elif tablename == "Crew":
+        fields = ["Crew Name", "Crew Details"]
+        entry_boxes = {}
+
+        for i, field in enumerate(fields):
+          label = tk.Label(edit_frame, text=field)
+          label.grid(row=i, column=0)
+
+          if field == "Crew Name":
+            entry = tk.Entry(edit_frame)
+            entry.insert(0, existing_data[1])
+
+          elif field == "Crew Details":
+            entry = tk.Entry(edit_frame)
+            entry.insert(0, existing_data[3])
+
+          entry.grid(row=i, column=1, pady=5)
+          entry_boxes[field] = entry
+
+      elif tablename == "Airport":
+        fields = ["Airport Name", "Airport Country", "Airport City"]
+        entry_boxes = {}
+
+        for i, field in enumerate(fields):
+          label = tk.Label(edit_frame, text=field)
+          label.grid(row=i, column=0)
+
+          entry = tk.Entry(edit_frame)
+          entry.insert(0, existing_data[i + 1])
+
+          entry.grid(row=i, column=1, pady=5)
+          entry_boxes[field] = entry
+
+      elif tablename == "Aircraft":
+        fields = ["Aircraft Name", "Aircraft Type", "Passenger Capacity"]
+        entry_boxes = {}
+
+        for i, field in enumerate(fields):
+          label = tk.Label(edit_frame, text=field)
+          label.grid(row=i, column=0)
+
+          if field == "Aircraft Type":
+            choices = ["Commercial", "Private"]
+            entry = ttk.Combobox(edit_frame, values=choices)
+            entry.insert(0, existing_data[i + 1])
+
+          else:
+            entry = tk.Entry(edit_frame)
+            entry.insert(0, existing_data[i + 1])
+
+          entry.grid(row=i, column=1, pady=5)
+          entry_boxes[field] = entry
+
+      elif tablename == "Pilot":
+        fields = [
+          "Employee ID", "License Type", "Passport Number", "Country of Origin"
+        ]
+        entry_boxes = {}
+
+        for i, field in enumerate(fields):
+          label = tk.Label(edit_frame, text=field)
+          label.grid(row=i, column=0)
+
+          if field == "Employee ID":
+            choices = getEmployeeChoices()
+            entry = ttk.Combobox(edit_frame, values=choices)
+            entry.insert(0, existing_data[i + 1])
+
+          elif field == "License Type":
+            choices = ["Commercial", "Private", "Full"]
+            entry = ttk.Combobox(edit_frame, values=choices)
+            entry.insert(0, existing_data[i + 1])
+
+          else:
+            entry = tk.Entry(edit_frame)
+            entry.insert(0, existing_data[i + 1])
+
+          entry.grid(row=i, column=1, pady=5)
+          entry_boxes[field] = entry
+
+      def get_entry_data():
+        data = {}
+        for col, entry in entry_boxes.items():
+          data[col] = entry.get()
+        updateRecord(data)
+
+      retrieve_button = tk.Button(edit_frame,
+                                  text="Save Changes",
+                                  command=get_entry_data)
+      retrieve_button.grid(row=len(columns), columnspan=2, pady=10)
+
+  update_button = tk.Button(window, text="Edit Record", command=editData)
 
   add_button = tk.Button(window, text="Add Record", command=addRecord)
 
@@ -842,7 +1156,9 @@ def returnTable(tablename):
 
   if tablename == "General Overview" or tablename == "Departures" or tablename == "Arrivals" or tablename == "Pilot Schedule":
     assign_pilots_button.pack(side=tk.LEFT, padx=10)
-  update_button.pack(side=tk.RIGHT, padx=10)
+
+  if tablename != "Pilot Schedule":
+    update_button.pack(side=tk.RIGHT, padx=10)
 
   closeDatabase()
 

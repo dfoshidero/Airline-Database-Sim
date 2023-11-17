@@ -12,7 +12,7 @@ This Airline Database Simulator is a Python-based application designed for the e
   - **User-Friendly Interface:** A tkinter-based GUI simplifies database interactions, making it accessible for all users.
 
 ## Technical Details 
-  - **Languages and Frameworks:** Python, SQL.
+  - **Languages:** Python, SQL.
   - **Libraries & Frameworks:** Tkinter (for GUI), SQLite3 (for database interactions)
   - **Database Management:** Test database developed in SQL Server Management Studio, data is exported as a **`.db`** file, and converted for sqlite3.
 

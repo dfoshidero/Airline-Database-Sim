@@ -1,8 +1,8 @@
-# Airline Database Simulator
+# Airline Database (CRUD) Simulator
 
 An Airline DBMS Simulator made using Python and SQL.
 
-This Airline Database Simulator is a Python-based application designed for the exploration of SQL and database development. This project, part of a school module on Databases, provides a practical experience in connecting a Python application frontend to a Relational Database System (RDS) backend. It was explored as a means of developing understanding in database management in the context of a real-world-like airline system.
+This Airline Database Simulator is a Python-based application designed for the exploration of SQL and database CRUD application development. This project, part of a school module on Databases, provides a practical experience in connecting a Python application frontend to a Relational Database System (RDS) backend. It was explored as a means of developing understanding in database management in the context of a real-world-like airline system.
 
 ## Implemented Features
   - **Database Reset:** Easily reset the entire database to its original state.
